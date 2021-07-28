@@ -9,15 +9,12 @@ from urllib import request, parse
 from datetime import datetime
 import  pprint 
 import logging
-import os
+import os, sys
+import time
 
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.INFO)
 
 projects = {
-    "test": {
-        "id" : "a31dea04b-5dbd-47b8-96af-7d46fcadff23",
-        "dev": True
-    },
     "ITG-1692": {
         "id": "a9f70583f-fe10-4a93-b42e-09c6c9ded724",
         "dev": True
@@ -26,79 +23,43 @@ projects = {
         "id": "aaa633d35-883f-4f89-8910-c99734c93af7",
         "dev": False
     },
+    "nancy-1": {
+        "id": "a4d37ff40-ea3b-4473-9326-db91e58bf23c",
+        "dev": False
+    },
+    "int-test": {
+        "id": "a8a721bda-ce34-43e8-bc08-6a1d129897df",
+        "dev": True
+    },
+    "Dev": {
+        "id": "ae377cfa2-2db4-4472-a14b-c20e5ebdd80f",
+        "dev": True
+    },
+    "nancy-cognite": {
+        "id": "a4d895117-a1f5-42da-a2ee-8b0e62899c8e",
+        "dev": False
+    },
+    "noproject": {
+        "id": "000",
+        "dev": True
+    }
 }
 
-def IngestRaw(cdf_client, itg_sample_raw_database):
+def IngestRaw(cdf_client, database, table, data):
+    try:
+        res = cdf_client.raw.databases.create(database)
+    except Exception as e:
+        if not (str(e).startswith("Databases with the following names already exists")):
+            raise
 
-   area_json = """
-   {
-       "r1":{
-           "id":"a1",
-           "name":"Snorre",
-           "equipments":"eqPump001"
-       },
-       "r2":{
-           "id":"a2",
-           "name":"Valhall",
-           "equipments":"eqPump002"
-       },
-       "r3":{
-           "id":"a3",
-           "name":"Ekofisk",
-           "equipments":"eqPump003"
-       }
-    }
-   """
-
-   equipment_json = """
-   {
-      "r1":{
-         "id":"eqPump001",
-         "description":"Pump 1",
-         "isOperational":true,
-         "parent":"eqPump003",
-         "dryWeight":"5 kg",
-         "area":"a1"
-      },
-      "r2":{
-         "id":"eqPump002",
-         "description":"Pump 2",
-         "isOperational":false,
-         "parent":"eqPump001",
-         "dryWeight":"300 g",
-         "area":"a2"
-      },
-      "r3":{
-         "id":"eqPump003",
-         "description":"Pump 3",
-         "isOperational":true,
-         "parent":"eqPump002",
-         "dryWeight":"2 kg",
-         "area":"a3"
-      }
-   }
-   """
-
-
-   #res = cdf_client.raw.databases.create(itg_sample_raw_database)
-   #print(res)
+    try:
+       res = cdf_client.raw.tables.create(database, table)
+    except Exception as e:
+        if not (str(e).startswith("Tables already created")):
+             raise
+ 
+    cdf_client.raw.rows.insert(database, table, json.loads(data))
    
-#   res = cdf_client.raw.tables.create(itg_sample_raw_database, "Area")
-#   print(res)
-#   
-   #res = cdf_client.raw.tables.create(itg_sample_raw_database, "Equipment")
-   #print(res)
-
-#   cdf_client.raw.rows.insert(itg_sample_raw_database, "Equipment", json.loads(equipment_json))
-#   print(res)
-#   
-#   cdf_client.raw.rows.insert(itg_sample_raw_database, "Area", json.loads(area_json))
-#   
-   Equipment_raw = "https://fusion.cognite.com/{}/raw/{}/Equipment".format(cdf_tenant, itg_sample_raw_database)
-   Area_raw = "https://fusion.cognite.com/{}/raw/{}/Area".format(cdf_tenant, itg_sample_raw_database)
-#   
-   print(Area_raw)
-   print(Equipment_raw)
 
 #def map_dry_weight(dryWeight: str) -> dict:
 #  result = {}
@@ -123,20 +84,18 @@ def map_dry_weight(dryWeight: str) -> dict:
   result["unit"] = re.search(r'[a-zA-Z]+', dryWeight).group() #Searches for all the string
   return result
 
-def Ingest2Itg(items, data_type, project):
-
+def Ingest2Itg(items, data_type, project, api_key):
     if projects[project]["dev"] :
         hostname = "http://localhost:3001"
     else:
         hostname = "https://itg.cognite.ai"
 
     url = "%s/api/v2/projects/%s/json/%s" % (hostname, projects[project]["id"], data_type)
-
     headers = {
-        'Authorization': f'Bearer {api_key}', 
-        'token': '',
+        'Authorization': "Bearer {}".format(api_key), 
         'Content-Type': 'application/json'
     }
+    print(headers)
 
     logging.info(url)
     pp = pprint.PrettyPrinter(indent=4)
@@ -159,8 +118,8 @@ def Ingest2Itg(items, data_type, project):
     except Exception as e:
         logging.error(e)
 
-def TransformIngest(cdf_client, itg_sample_raw_database):
-    items = [item.columns for item in cdf_client.raw.rows.list(itg_sample_raw_database, "Equipment")]
+def TransformIngest(cdf_client, itg_sample_raw_database, api_key):
+    items = [item.columns for item in cdf_client.raw.rows.list(itg_sample_raw_database, "Equipment0")]
     print("--- Equipment")
     for item in items:
         print(item)
@@ -189,13 +148,13 @@ def TransformIngest(cdf_client, itg_sample_raw_database):
     for item in items:
         print(item)
 
-    Ingest2Itg(items, "Area", "ITG-1692")
+    Ingest2Itg(items, "Equipment", "ITG-1692", api_key)
 
 #    print("--- Area")
-#    items = [item.columns for item in cdf_client.raw.rows.list(itg_sample_raw_database, "Area")]
+#    items = [item.columns for item in cdf_client.raw.rows.list(itg_sample_raw_database, "Area6")]
 #    for item in items:
 #        print(item)
-#
+
 #    print("--- put equipments to object")
 #    for item in items:
 #        #item['equipments'] = {'id': item['equipments']}
@@ -203,84 +162,35 @@ def TransformIngest(cdf_client, itg_sample_raw_database):
 #    for item in items:
 #        print(item)
 #
-#    Ingest2Itg(items, "Area")
+#    Ingest2Itg(items, "Area", "ITG-1692")
 
-def TestItg1692():
-    '''
-	type Itg1692A {
-	  id: ID! @id
-	  tag: String
-	  isActive: Boolean
-	  dimension: Dimension @relation(name: "HAS_DIM", direction: OUT)
-	}
-	
-	type Itg1692 {
-	  tag: String
-	  isActive: Boolean
-	  dimension: Dimension @relation(name: "HAS_DIM", direction: OUT)
-	}
-    '''
-    item = {
-        "tag": '21pt1019',
-         "isActive": False,
-         "dimension": {
-             "x": 0,
-             "y": 0,
-             "z": 1,
+def IngestAreas(cdf_client, initArea, finalArea):
+    database = "ItgSampleDataPop"
+    table = "Area"
+    for id in range(initArea, finalArea):
+        area_json = """
+        {
+            "r%d":{
+                "id":"a%d",
+                "name":"Area%d"
+            }
          }
-     }
-    Ingest2Itg([item], "Itg1692", "ITG-1692")
-    logging.info("---")
-    Ingest2Itg([item], "Itg1692A", "ITG-1692")
-    logging.info("---")
-    Ingest2Itg(item, "Itg1692A", "ITG-1692")
-    logging.info("---")
-
-def Aize() :
-    items = [{
-  "id": "ff06475e-70d2-4705-bd53-cc790d6827e0",
-  "jamaId": 18484,
-  "jamaGlobalId": "GID-70145",
-  "description": "This is a test requirement",
-  "lastMerged": {
-    "day": 30,
-    "month": 6,
-    "year": 2021,
-    "hour": 9,
-    "minute": 11
-  },
-  "modifiedDate": {
-    "day": 19,
-    "month": 5,
-    "year": 2021,
-    "hour": 9,
-    "minute": 50
-  },
-  "name": "Test Functional requirement",
-  "projectId": "56",
-  "status": "Draft",
-  "tags": [],
-  "type": "Functional Requirement"
-    }]
-
-    Ingest2Itg(items, "Requirement", "test")
+         """ % (id, id, id)
+        IngestRaw(cdf_client, database, table, area_json)
+        logging.info("Successfully ingested area %d" % id)
+        time.sleep(1)
 
 if __name__=="__main__":
+    api_key = os.environ['API_KEY'] 
+    tenant = os.environ['TENANT']
+ 
+    client_name = "ingestion-pipeline"
+    cdf_client = CogniteClient(api_key=api_key, client_name=client_name, project=tenant)
+ 
+    #IngestRaw(cdf_client, itg_sample_raw_database)
+ 
+    #FetchRaw(cdf_client, itg_sample_raw_database)
+ 
+    #TransformIngest(cdf_client, itg_sample_raw_database, api_key)
 
-   api_key = os.environ['ApiKey'] 
-   cdf_tenant = os.environ['CdfTenant']
-   itg_sample_raw_database = os.environ['Database'] 
-
-   client_name = "ingestion-pipeline"
-   cdf_client = CogniteClient(api_key=api_key, client_name=client_name, project=cdf_tenant)
-
-   #IngestRaw(cdf_client, itg_sample_raw_database)
-
-   #FetchRaw(cdf_client, itg_sample_raw_database)
-
-   #TransformIngest(cdf_client, itg_sample_raw_database)
-
-   TestItg1692()
-
-   #Aize()
-
+    IngestAreas(cdf_client, 3, 20)
